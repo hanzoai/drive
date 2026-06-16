@@ -3,6 +3,7 @@ package drive
 import (
 	"bytes"
 	"context"
+	"encoding/csv"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -56,6 +57,7 @@ func Mount(app any, deps cloud.Deps) error {
 	a.Get("/v1/drive/files/:id", svc.download)    // ?org=
 	a.Post("/v1/drive/shares", svc.share)         // ?org=&id=&recipient=&name=&role=
 	a.Get("/v1/drive/audit", svc.audit)           // ?org= — tamper-evident trail (SOC2)
+	a.Get("/v1/drive/admin/access-review", svc.accessReview) // ?org= — CSV evidence (SOC2 CC6.2/6.3)
 	deps.Logger.Info("drive mounted", "routes", "/v1/drive/*", "backend", beURL)
 	return nil
 }
@@ -173,6 +175,33 @@ func (s *service) audit(c *zip.Ctx) error {
 	trail, _ := st.AuditTrail(200)
 	tampered, _ := st.VerifyAudit()
 	return c.JSON(200, map[string]any{"intact": tampered == 0, "tampered_at": tampered, "entries": trail})
+}
+
+// accessReview exports the access-review evidence as CSV (SOC2 CC6.2/CC6.3): one
+// row per grant (node id, node name, recipient, role). The export itself is audited.
+func (s *service) accessReview(c *zip.Ctx) error {
+	st, err := s.store(c.Query("org"))
+	if err != nil {
+		return c.JSON(500, errJSON(err))
+	}
+	rows, err := st.AccessReview()
+	if err != nil {
+		return c.JSON(500, errJSON(err))
+	}
+	var buf bytes.Buffer
+	w := csv.NewWriter(&buf)
+	w.Write([]string{"node_id", "node_name", "recipient", "role"})
+	for _, r := range rows {
+		w.Write([]string{r.NodeID, r.NodeName, r.Recipient, r.Role})
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		return c.JSON(500, errJSON(err))
+	}
+	st.Audit(actor(c), "access-review.export", "", fmt.Sprintf("rows=%d", len(rows)))
+	c.SetHeader("Content-Type", "text/csv; charset=utf-8")
+	c.SetHeader("Content-Disposition", `attachment; filename="access-review.csv"`)
+	return c.String(200, buf.String())
 }
 
 func errJSON(err error) map[string]string { return map[string]string{"error": err.Error()} }
