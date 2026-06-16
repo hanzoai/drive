@@ -32,9 +32,10 @@ Content never reaches the server in plaintext; sharing is a key re-wrap, not a r
 - **Desktop sync**: the `hanzoai/vfs` FUSE mount — a normal folder, encrypted-at-rest.
 
 ## Status
-Core library + e2e-PQ test (upload → list → download → share → non-shared-denied) green.
-Next: `/v1/drive` HTTP surface (cloud subsystem `Mount`), chunked large files,
-storage-console wiring, HSM-rooted DEK custody (`luxfi/hsm`).
+Core library + **`/v1/drive` HTTP surface** (cloud subsystem `Mount`, registers into
+`cloud.Registry` order 120) both green — health, upload (PQ-sealed), list, download,
+share. storage-console can hit `/v1/drive/*` once the cloud binary enables `drive`.
+Next: chunked large files, storage-console wiring, HSM-rooted DEK custody (`luxfi/hsm`).
 
 See [`HIP`]: realizes HIP-0302 (encrypted SQLite) + HIP-0107 (VFS replication).
 MIT (depends on AGPL `hanzoai/s3` at the storage floor).
