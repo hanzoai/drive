@@ -2,7 +2,7 @@ package drive_test
 
 import (
 	"context"
-	
+	"fmt"
 	"strings"
 	"testing"
 
@@ -47,4 +47,57 @@ func TestDriveRoundTripPQShare(t *testing.T) {
 		t.Fatal("mallory downloaded without a share — e2e ACL broken")
 	}
 	t.Log("Hanzo Drive e2e-PQ: upload sealed, owner+shared decrypt via ML-KEM unwrap, non-shared denied")
+}
+
+// TestDRRestoreDrill proves restore-from-substrate (SOC2 A1.3 — recovery): after
+// total node loss (Store closed), a FRESH Store opened against the SAME content
+// backend dir and the SAME metadata DB path recovers every file byte-for-byte and
+// the tamper-evident audit chain still verifies intact.
+func TestDRRestoreDrill(t *testing.T) {
+	ctx := context.Background()
+	// Fixed paths shared across the "before" and "after" Store instances.
+	backendDir := t.TempDir()
+	metaDSN := "file:" + t.TempDir() + "/meta.db"
+	owner, _ := age.GenerateHybridIdentity()
+
+	files := map[string]string{
+		"contract.txt": "binding agreement v1",
+		"ledger.csv":   "date,amount\n2026-06-16,42",
+		"keys.bin":     "\x00\x01\x02\xfe\xff binary payload",
+	}
+
+	// --- before: open Store, upload several files, record node ids, audit, close ---
+	nodeIDs := map[string]string{}
+	{
+		be, err := backend.Open(ctx, "file://"+backendDir)
+		if err != nil { t.Fatalf("backend open: %v", err) }
+		st, err := drive.Open(metaDSN, be)
+		if err != nil { t.Fatalf("open: %v", err) }
+		for name, body := range files {
+			n, err := st.Upload(ctx, "", name, strings.NewReader(body), owner.Recipient())
+			if err != nil { t.Fatalf("upload %s: %v", name, err) }
+			nodeIDs[name] = n.ID
+			if err := st.Audit("alice", "upload", n.ID, name); err != nil { t.Fatalf("audit: %v", err) }
+		}
+		if at, _ := st.VerifyAudit(); at != 0 { t.Fatalf("pre-loss audit tampered at %d", at) }
+		// simulate node loss: drop the running Store entirely.
+		if err := st.Close(); err != nil { t.Fatalf("close: %v", err) }
+	}
+
+	// --- after: FRESH Store against the SAME substrate — restore-from-disk ---
+	be, err := backend.Open(ctx, "file://"+backendDir)
+	if err != nil { t.Fatalf("restore backend open: %v", err) }
+	st, err := drive.Open(metaDSN, be)
+	if err != nil { t.Fatalf("restore open: %v", err) }
+	defer st.Close()
+
+	for name, want := range files {
+		got, err := st.Download(ctx, nodeIDs[name], "owner", owner)
+		if err != nil { t.Fatalf("restore download %s: %v", name, err) }
+		if string(got) != want { t.Fatalf("restore %s: got %q want %q", name, got, want) }
+	}
+	if at, _ := st.VerifyAudit(); at != 0 {
+		t.Fatalf("audit chain broke across restore at seq %d — substrate not durable", at)
+	}
+	t.Log(fmt.Sprintf("DR drill (SOC2 A1.3): %d files restored byte-identical from substrate + audit chain intact", len(files)))
 }
