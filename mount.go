@@ -55,6 +55,7 @@ func Mount(app any, deps cloud.Deps) error {
 	a.Post("/v1/drive/files", svc.upload)         // ?org=&parent=&name= ; body=content
 	a.Get("/v1/drive/files/:id", svc.download)    // ?org=
 	a.Post("/v1/drive/shares", svc.share)         // ?org=&id=&recipient=&name=&role=
+	a.Get("/v1/drive/audit", svc.audit)           // ?org= — tamper-evident trail (SOC2)
 	deps.Logger.Info("drive mounted", "routes", "/v1/drive/*", "backend", beURL)
 	return nil
 }
@@ -106,6 +107,7 @@ func (s *service) mkdir(c *zip.Ctx) error {
 	if err != nil {
 		return c.JSON(500, errJSON(err))
 	}
+	st.Audit(actor(c), "mkdir", n.ID, n.Name)
 	return c.JSON(201, n)
 }
 
@@ -118,6 +120,7 @@ func (s *service) upload(c *zip.Ctx) error {
 	if err != nil {
 		return c.JSON(500, errJSON(err))
 	}
+	st.Audit(actor(c), "upload", n.ID, n.Name)
 	return c.JSON(201, n)
 }
 
@@ -128,8 +131,10 @@ func (s *service) download(c *zip.Ctx) error {
 	}
 	data, err := st.Download(context.Background(), c.Param("id"), s.ownerName, s.owner)
 	if err != nil {
+		st.Audit(actor(c), "download.denied", c.Param("id"), err.Error())
 		return c.JSON(404, errJSON(err))
 	}
+	st.Audit(actor(c), "download", c.Param("id"), "")
 	return c.SendStream(bytes.NewReader(data))
 }
 
@@ -149,7 +154,25 @@ func (s *service) share(c *zip.Ctx) error {
 	if err := st.Share(c.Query("id"), s.ownerName, s.owner, rcpts[0], c.Query("name"), role); err != nil {
 		return c.JSON(500, errJSON(err))
 	}
+	st.Audit(actor(c), "share", c.Query("id"), c.Query("name")+":"+role)
 	return c.JSON(200, map[string]string{"status": "shared"})
+}
+
+func actor(c *zip.Ctx) string {
+	if a := c.Query("actor"); a != "" {
+		return a
+	}
+	return "system"
+}
+
+func (s *service) audit(c *zip.Ctx) error {
+	st, err := s.store(c.Query("org"))
+	if err != nil {
+		return c.JSON(500, errJSON(err))
+	}
+	trail, _ := st.AuditTrail(200)
+	tampered, _ := st.VerifyAudit()
+	return c.JSON(200, map[string]any{"intact": tampered == 0, "tampered_at": tampered, "entries": trail})
 }
 
 func errJSON(err error) map[string]string { return map[string]string{"error": err.Error()} }

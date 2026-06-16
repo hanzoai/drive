@@ -33,4 +33,14 @@ CREATE TABLE IF NOT EXISTS shares (
   wrapped_dek BLOB NOT NULL,        -- node DEK sealed to recipient (e2e share)
   created_at  INTEGER NOT NULL,
   PRIMARY KEY (node_id, recipient)
+);
+CREATE TABLE IF NOT EXISTS audit (
+  seq        INTEGER PRIMARY KEY AUTOINCREMENT,
+  ts         INTEGER NOT NULL,
+  actor      TEXT NOT NULL,         -- lux.id principal that performed the action
+  action     TEXT NOT NULL,         -- mkdir | upload | download | share | list
+  resource   TEXT NOT NULL,         -- node id / path
+  detail     TEXT NOT NULL DEFAULT '',
+  prev_hash  TEXT NOT NULL,         -- hash of the previous entry (chain)
+  hash       TEXT NOT NULL          -- sha256(seq|ts|actor|action|resource|detail|prev_hash)
 );`

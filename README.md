@@ -35,7 +35,9 @@ Content never reaches the server in plaintext; sharing is a key re-wrap, not a r
 Core library + **`/v1/drive` HTTP surface** (cloud subsystem `Mount`, registers into
 `cloud.Registry` order 120) both green — health, upload (PQ-sealed), list, download,
 share. storage-console can hit `/v1/drive/*` once the cloud binary enables `drive`.
-Next: chunked large files, storage-console wiring, HSM-rooted DEK custody (`luxfi/hsm`).
+Tamper-evident **audit trail** (hash-chained, `VerifyAudit`) + `/v1/drive/audit` — SOC 2 CC7.2.
+See [`SOC2-READINESS.md`](SOC2-READINESS.md). Next: HSM-rooted DEK custody (`luxfi/hsm`),
+SIEM log export, chunked large files, storage-console wiring.
 
 See [`HIP`]: realizes HIP-0302 (encrypted SQLite) + HIP-0107 (VFS replication).
 MIT (depends on AGPL `hanzoai/s3` at the storage floor).
