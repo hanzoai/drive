@@ -24,7 +24,7 @@ about what is code versus organizational process an auditor must still see.
 | CC1–CC5 | Governance, risk, policy, HR | security policy, risk assessment, background checks, vendor mgmt, IR runbook, access reviews | **org process** — not code; evidence required |
 
 ## Gaps to close for "audit-ready"
-1. **HSM-root the DEK custody** (`luxfi/hsm`) — replace the deployment identity stand-in so no key material is ever in-process.
+1. ~~HSM-root the DEK custody~~ ✅ done (`custody.go`, `luxfi/hsm`); set `DRIVE_HSM_PROVIDER`+`DRIVE_HSM_KEY_ID` to a real KMS/HSM in prod. Threshold (`luxfi/mpc`) is the next custody layer.
 2. **Ship the audit trail + o11y to a SIEM** with retention + alerting (CC7.2/7.3).
 3. **Automated access reviews** — periodic export of `shares` per tenant for owner attestation.
 4. **Retention/legal-hold** policy enforced on `versions`/`audit` (immutable S3 object-lock recommended).

@@ -37,7 +37,7 @@ func Mount(app any, deps cloud.Deps) error {
 	if err != nil {
 		return fmt.Errorf("drive: backend %q: %w", beURL, err)
 	}
-	id, rcpt, err := resolveIdentity()
+	id, rcpt, err := resolveIdentity(deps.DataDir)
 	if err != nil {
 		return err
 	}
@@ -206,7 +206,21 @@ func (s *service) accessReview(c *zip.Ctx) error {
 
 func errJSON(err error) map[string]string { return map[string]string{"error": err.Error()} }
 
-func resolveIdentity() (age.Identity, age.Recipient, error) {
+func resolveIdentity(dataDir string) (age.Identity, age.Recipient, error) {
+	// Production: root the identity in an HSM (luxfi/hsm). The master never
+	// leaves the HSM; the PQ identity is sealed under it at {dataDir}/identity.sealed.
+	if prov := os.Getenv("DRIVE_HSM_PROVIDER"); prov != "" {
+		cfg := map[string]string{}
+		if v := os.Getenv("DRIVE_HSM_ENV_VAR"); v != "" {
+			cfg["env_var"] = v
+		}
+		cust, err := NewCustodian(prov, os.Getenv("DRIVE_HSM_KEY_ID"), cfg)
+		if err != nil {
+			return nil, nil, err
+		}
+		return cust.LoadOrCreate(context.Background(), filepath.Join(dataDir, "identity.sealed"))
+	}
+	// Dev fallback: a key file, else ephemeral.
 	if p := os.Getenv("DRIVE_AGE_KEY"); p != "" {
 		b, err := os.ReadFile(p)
 		if err != nil {
@@ -216,9 +230,8 @@ func resolveIdentity() (age.Identity, age.Recipient, error) {
 		if err != nil || len(ids) == 0 {
 			return nil, nil, fmt.Errorf("drive: DRIVE_AGE_KEY: %w", err)
 		}
-		if hi, ok := ids[0].(interface{ Recipient() age.Recipient }); ok {
-			return ids[0], hi.Recipient(), nil
-		}
+		r, err := recipientOf(ids[0])
+		return ids[0], r, err
 	}
 	id, err := age.GenerateHybridIdentity()
 	if err != nil {
