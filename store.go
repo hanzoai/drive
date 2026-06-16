@@ -159,6 +159,31 @@ func (s *Store) Download(ctx context.Context, nodeID, recipient string, as age.I
 	return aead.Open(nil, sealed[:ns], sealed[ns:], nil)
 }
 
+// ShareRow is one access-grant row for the access-review export (SOC2 CC6.2/6.3:
+// who has access to what, with which role).
+type ShareRow struct {
+	NodeID    string
+	NodeName  string
+	Recipient string
+	Role      string
+}
+
+// AccessReview returns every share grant joined to its node — the evidence a
+// periodic access review (SOC2 CC6.2/CC6.3) is run against: each recipient, the
+// node they can reach, and their role.
+func (s *Store) AccessReview() ([]ShareRow, error) {
+	st, _, err := s.db.Prepare(`SELECT s.node_id, coalesce(n.name,''), s.recipient, s.role FROM shares s LEFT JOIN nodes n ON n.id = s.node_id ORDER BY s.node_id, s.recipient`)
+	if err != nil {
+		return nil, err
+	}
+	defer st.Close()
+	var out []ShareRow
+	for st.Step() {
+		out = append(out, ShareRow{NodeID: st.ColumnText(0), NodeName: st.ColumnText(1), Recipient: st.ColumnText(2), Role: st.ColumnText(3)})
+	}
+	return out, nil
+}
+
 // List returns the children of a folder.
 func (s *Store) List(parent string) ([]Node, error) {
 	st, _, err := s.db.Prepare(`SELECT id,name,kind,size,coalesce(content_key,''),modified_at FROM nodes WHERE parent_id=? AND trashed=0 ORDER BY kind,name`)
