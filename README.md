@@ -1,3 +1,5 @@
+<p align="center"><img src=".github/hero.svg" alt="drive" width="880"></p>
+
 # Hanzo Drive
 
 End-to-end **post-quantum**, Google-Drive-class storage on the Hanzo object substrate.
