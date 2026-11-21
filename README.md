@@ -2,6 +2,8 @@
 
 # Hanzo Drive
 
+[![Open in Hanzo](https://hanzo.app/badges/open-in-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/drive&ref=main&action=open) [![Edit with Hanzo](https://hanzo.app/badges/edit-with-hanzo.svg)](https://hanzo.app/dev/open?repo=github.com/hanzoai/drive&ref=main&action=edit)
+
 End-to-end **post-quantum**, Google-Drive-class storage on the Hanzo object substrate.
 Content never reaches the server in plaintext; sharing is a key re-wrap, not a re-encrypt.
 
